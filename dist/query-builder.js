@@ -408,8 +408,12 @@
             that = this;
 
         (function add(data, $container){
-            var $group = that.addGroup($container, false),
-                $buttons = $group.find('>.rules-group-header input[name$=_cond]');
+            var $group = that.addGroup($container, false);
+            if ($group === null) {
+                return;
+            }
+
+            var $buttons = $group.find('>.rules-group-header input[name$=_cond]');
 
             if (data.condition === undefined) {
                 data.condition = that.settings.default_condition;
@@ -442,8 +446,12 @@
                         rule.operator = 'equal';
                     }
 
-                    var $rule = that.addRule($group),
-                        filter = that.getFilterById(rule.id),
+                    var $rule = that.addRule($group);
+                    if ($rule === null) {
+                        return;
+                    }
+
+                    var filter = that.getFilterById(rule.id),
                         operator = that.getOperatorByType(rule.operator);
 
                     $rule.find('.rule-filter-container select[name$=_filter]').val(rule.id).trigger('change');
@@ -608,7 +616,7 @@
             var $this = $(this),
                 $rule = $this.closest('.rule-container');
 
-            $rule.remove();
+            that.deleteRule($rule);
         });
 
         // delete group button
@@ -633,6 +641,22 @@
             $group = $(this.template.group.call(this, group_id, ++level));
 
         $group.data('queryBuilder', {level:level});
+
+        var e = jQuery.Event('addGroup.queryBuilder', {
+            group_id: group_id,
+            level: level,
+            addRule: addRule,
+            group: $group,
+            parent: $parent,
+            builder: this
+        });
+
+        this.$el.trigger(e);
+
+        if (e.isDefaultPrevented()) {
+            return null;
+        }
+
         $container.append($group);
 
         if (this.settings.onAfterAddGroup) {
@@ -651,11 +675,23 @@
     /**
      * Tries to delete a group. The group is not deleted if at least one rule is no_delete.
      * @param $group {jQuery}
-     * @return keepGroup {boolean} true if the group has not been deleted
+     * @return {boolean} true if the group has been deleted
      */
     QueryBuilder.prototype.deleteGroup = function($group) {
         if ($group[0].id == this.$el_id + '_group_0') {
             return;
+        }
+
+        var e = jQuery.Event('deleteGroup.queryBuilder', {
+            group_id: $group[0].id,
+            group: $group,
+            builder: this
+        });
+
+        this.$el.trigger(e);
+
+        if (e.isDefaultPrevented()) {
+            return false;
         }
 
         this.trigger('beforeDeleteGroup', $group);
@@ -675,7 +711,7 @@
                 }
             }
             else {
-                keepGroup|= that.deleteGroup($element);
+                keepGroup|= !that.deleteGroup($element);
             }
         });
 
@@ -683,7 +719,7 @@
             $group.remove();
         }
 
-        return keepGroup;
+        return !keepGroup;
     };
 
     /**
@@ -698,6 +734,20 @@
             $filterSelect = $(this.getRuleFilterSelect(rule_id));
 
         $rule.data('queryBuilder', {flags: {}});
+
+        var e = jQuery.Event('addRule.queryBuilder', {
+            rule_id: rule_id,
+            rule: $rule,
+            parent: $parent,
+            builder: this
+        });
+
+        this.$el.trigger(e);
+
+        if (e.isDefaultPrevented()) {
+            return null;
+        }
+
         $container.append($rule);
         $rule.find('.rule-filter-container').append($filterSelect);
 
@@ -708,6 +758,30 @@
         this.trigger('afterAddRule', $rule);
 
         return $rule;
+    };
+
+    /**
+     * Delete a rule.
+     * @param $rule {jQuery}
+     * @return {boolean} true if the rule has been deleted
+     */
+    QueryBuilder.prototype.deleteRule = function($rule) {
+        var e = jQuery.Event('deleteRule.queryBuilder', {
+            rule_id: $rule[0].id,
+            rule: $rule,
+            builder: this
+        });
+
+        this.$el.trigger(e);
+
+        if (e.isDefaultPrevented()) {
+            return false;
+        }
+
+        this.trigger('beforeDeleteRule', $rule);
+
+        $rule.remove();
+        return true;
     };
 
     /**
